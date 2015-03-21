@@ -1,0 +1,724 @@
+<html>
+<head>
+       <title>source code: kernel9.asm</title>
+       <meta name="description" content="source code">
+       <style>
+           a:link {text-decoration: none}
+           a:visited {text-decoration: none}
+           a:hover {text-decoration: none; color:#ff0000}
+       </style>
+</head>
+<body leftmargin=110  rightmargin=110 topmargin=20 bgcolor=#FFFFFF text=#000000 link=blue vlink=blue alink=blue>
+ 
+ 
+<!-- * -->
+ 
+ 
+
+
+
+
+&nbsp; &nbsp;<center> <font color=#FFFFFF> ;</font> <font size=2 face="Lucida Console"> kernel9.asm </font></center>
+
+
+
+
+
+
+<!-- START AUTOMATIC ASM TO HTML EXPORT -->
+<pre><font size=2 face="Lucida Console">
+    <font color=#C0C0C0>; This kernel is assumed to be loaded at memory location 0800:0000 </font>
+    <font color=#C0C0C0>; </font>
+     
+    <font color=#000064>org</font> 0000h       <font color=#C0C0C0>; loaded at 0800:0000 by loader </font>
+     
+    <font color=#0000A0>jmp</font> start           <font color=#C0C0C0>; first instruction must be jmp </font>
+     
+    <font color=#C0C0C0>;-------------------------------------------------------------------- </font>
+    <font color=#C0C0C0>;-------------------------------------------------------------------- </font>
+    attrib <font color=#000064>db</font>  0110_1111b      <font color=#C0C0C0>;cyan background, bright white foreground </font>
+     
+    <font color=#C0C0C0>;-------------------------------------------- </font>
+    black  <font color=#000064>equ</font>  0000b      <font color=#C0C0C0>; black </font>
+    green   <font color=#000064>equ</font> 0010b       <font color=#C0C0C0>; green </font>
+    red     <font color=#000064>equ</font> 0100b       <font color=#C0C0C0>; red </font>
+    white   <font color=#000064>equ</font> 1111b       <font color=#C0C0C0>; white </font>
+    <font color=#C0C0C0>;-------------------------------------------- </font>
+     
+    <font color=#C0C0C0>;-------------------------------------------- </font>
+    black_white     <font color=#000064>equ</font>     0000_1111b       <font color=#C0C0C0>; white text on black background </font>
+    blue_yellow      <font color=#000064>equ</font>    0001_1110b       <font color=#C0C0C0>; yellow   text on blue  background </font>
+    gray_black      <font color=#000064>equ</font>     0111_0000b       <font color=#C0C0C0>; black text   on light gray background </font>
+    default         <font color=#000064>equ</font>     0110_1111b       <font color=#C0C0C0>; cyan background, bright white text </font>
+    <font color=#C0C0C0>;--------------------------------------------- </font>
+                 
+    option   		<font color=#000064>db</font>  0                  <font color=#C0C0C0>; used for get input </font>
+    temp    		<font color=#000064>dw</font>  0             
+    temp1   		<font color=#000064>db</font>  0                   <font color=#C0C0C0>; a temporary variable  </font>
+     
+    msg         	<font color=#000064>db</font>          <font color=#800080>"Welcome to The Mini OS Kernel"</font> 
+    msg_end: 
+     
+    invalid_msg     <font color=#000064>db</font>      0dh,0ah,<font color=#800080>"Invalid option, Press Correct Letter"</font> 
+    invalid_msg_end: 
+     
+    prompt      			<font color=#000064>db</font>  0dh,0ah,<font color=#800080>"What do you want to do ?"</font> 
+               				<font color=#000064>db</font>  0dh,0ah,<font color=#800080>"(R)Reverse Print - Input your string and get its reverse"</font> 
+                			<font color=#000064>db</font>  0dh,0ah,<font color=#800080>"(C)Colorized print - Print your string with your favorite color"</font> 
+                			<font color=#000064>db</font>  0dh, 0ah, <font color=#800080>"(A)Change Color Attribute - Change the background and font color"</font> 
+                			<font color=#000064>db</font>  0dh,0ah,<font color=#800080>"(S)Screen clear - Clear the entire screen"</font> 
+                			<font color=#000064>db</font>  0dh, 0ah, <font color=#800080>"(E)Exit - Exit the system (reboot)"</font> 
+                  
+    prompt_end: 
+     
+    pr_str      			<font color=#000064>db</font>      <font color=#800080>"Enter your string (Upto 80 characters): "</font> 
+    pr_str_end: 
+     
+    color_sel       		<font color=#000064>db</font>  0ah, 0dh,<font color=#800080>"Select Color: (B)Black,   (G)Green,  (R)Red,  (W)White "</font> 
+    color_sel_end: 
+     
+     
+     
+    profile_select  <font color=#000064>db</font>  0ah, 0dh, <font color=#800080>"Choose a profile: (1) - White font on black background"</font> 
+                    <font color=#000064>db</font>  0ah, 0dh, <font color=#800080>"                  (2) - Yellow font on blue  background"</font> 
+                    <font color=#000064>db</font>  0ah, 0dh, <font color=#800080>"                  (3) - Black font on light gray background"</font> 
+                    <font color=#000064>db</font>  0ah, 0dh, <font color=#800080>"                  (4) - Default"</font> 
+    profile_select_end: 
+        
+     
+     
+    reboot_msg  			<font color=#000064>db</font>  0dh,0ah,0dh,0ah, <font color=#800080>"Press any key to reboot...."</font> 
+    reboot_msg_end: 
+     
+    str     				<font color=#000064>db</font>      80      dup(<font color=#800080>'$'</font>) 
+    end_str:                                                                               
+     
+    <font color=#C0C0C0>;------------------------------------- MACROS----------------------------------------- </font>
+    <font color=#C0C0C0>;------------------------------------------------------------------------------------ </font>
+     
+    <font color=#C0C0C0>; Macro: move_cursor </font>
+    move_cursor <font color=#00FF00>macro</font>  col, row 
+         
+        <font color=#C0C0C0>; save register state </font>
+        <font color=#0000A0>push</font> <font color=#800000>ax</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bx</font> 
+         
+        <font color=#C0C0C0>; cursor move function </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 2 
+        <font color=#0000A0>mov</font> <font color=#800000>dh</font>, row 
+        <font color=#0000A0>mov</font> <font color=#800000>dl</font>, col 
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>, 0           <font color=#C0C0C0>; page </font>
+        <font color=#0000A0>int</font> 10h 
+         
+        <font color=#C0C0C0>;restore register state </font>
+        <font color=#0000A0>pop</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+    endm     
+     
+    <font color=#C0C0C0>; Macro : move_next_line </font>
+    <font color=#C0C0C0>;-------------------------- </font>
+    move_next_line  <font color=#00FF00>macro</font> 
+        <font color=#0000A0>inc</font> <font color=#800000>dh</font> 
+        <font color=#0000A0>mov</font> <font color=#800000>dl</font>, 0 
+        move_cursor     <font color=#800000>dl</font>,     <font color=#800000>dh</font> 
+    endm 
+     
+     
+    <font color=#C0C0C0>;Macro : move_next_col </font>
+    <font color=#C0C0C0>;--------------------------- </font>
+    move_next_col   <font color=#00FF00>macro</font> 
+        <font color=#0000A0>inc</font> <font color=#800000>dl</font> 
+        move_cursor     <font color=#800000>dl</font>,     <font color=#800000>dh</font> 
+    endm 
+             
+    <font color=#C0C0C0>; macro : print_all </font>
+    <font color=#C0C0C0>;------------------ </font>
+    print_all <font color=#00FF00>macro</font>  
+         
+        <font color=#C0C0C0>; save regs </font>
+        <font color=#0000A0>push</font> <font color=#800000>ax</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>push</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>push</font> <font color=#800000>dx</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bp</font> 
+         
+         
+        <font color=#C0C0C0>; print </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 13h         <font color=#C0C0C0>; function select </font>
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, 1           <font color=#C0C0C0>; update cursor </font>
+        <font color=#C0C0C0>;attribute </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bl</font>, attrib 
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>, 0            <font color=#C0C0C0>; page 0 </font>
+         
+        <font color=#0000A0>int</font> 10h 
+         
+        <font color=#C0C0C0>; restore register </font>
+        <font color=#0000A0>pop</font> <font color=#800000>bp</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>dx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+    endm 
+     
+    <font color=#C0C0C0>; Macro : echo </font>
+    <font color=#C0C0C0>;------------------------ </font>
+    echo <font color=#00FF00>macro</font> 
+        <font color=#C0C0C0>; store the value of ah </font>
+        <font color=#0000A0>mov</font> temp1,   <font color=#800000>ah</font> 
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0eh             <font color=#C0C0C0>; display char function </font>
+        <font color=#0000A0>int</font> 10h                 <font color=#C0C0C0>; display and progress cursor </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, temp1 
+    endm 
+     
+    <font color=#C0C0C0>; Macro : scroll_down_line </font>
+    <font color=#C0C0C0>;-----------------------------     </font>
+    scroll_down_line <font color=#00FF00>macro</font> 
+        <font color=#0000A0>push</font>  <font color=#800000>ax</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bx</font> 
+         
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 7              <font color=#C0C0C0>; scroll down </font>
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>  , 1             <font color=#C0C0C0>; one line </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>  ,  0110b        <font color=#C0C0C0>; cyan </font>
+        <font color=#0000A0>int</font> 10h 
+         
+        <font color=#0000A0>pop</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+    endm     
+         
+    <font color=#C0C0C0>;----------------------Code Section--------------------------------- </font>
+    <font color=#C0C0C0>;------------------------------------------------------------------- </font>
+     
+    start:  
+     
+    <font color=#C0C0C0>; initialize ds and es with cs, and stack </font>
+    <font color=#0000A0>mov</font> <font color=#800000>ax</font>, 07c0h 
+    <font color=#0000A0>mov</font> <font color=#800000>ss</font>, <font color=#800000>ax</font> 
+    <font color=#0000A0>mov</font> <font color=#800000>sp</font>, 03feh 
+    <font color=#0000A0>push</font> <font color=#800000>cs</font> 
+    <font color=#0000A0>push</font> <font color=#800000>cs</font> 
+    <font color=#0000A0>pop</font> <font color=#800000>ds</font> 
+    <font color=#0000A0>pop</font> <font color=#800000>es</font> 
+     
+    <font color=#C0C0C0>;clear bx and dx register </font>
+    <font color=#0000A0>xor</font>     <font color=#800000>bx</font>, <font color=#800000>bx</font> 
+    <font color=#0000A0>xor</font>     <font color=#800000>dx</font>, <font color=#800000>dx</font> 
+     
+    <font color=#C0C0C0>; set display mode </font>
+    <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0h 
+    <font color=#0000A0>mov</font> <font color=#800000>al</font>, 03h 
+    <font color=#0000A0>int</font> 10h 
+     
+    <font color=#C0C0C0>;set blinking text-cursor </font>
+    <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 1h 
+    <font color=#0000A0>mov</font> <font color=#800000>ch</font>, 7           <font color=#C0C0C0>; ending row </font>
+    <font color=#0000A0>mov</font> <font color=#800000>cl</font>, 6           <font color=#C0C0C0>; starting row </font>
+    <font color=#0000A0>int</font> 10h 
+     
+    <font color=#C0C0C0>;--------- print welcome --------- </font>
+    <font color=#0000A0>call</font> clear_window 
+    <font color=#0000A0>mov</font>     <font color=#800000>si</font>,     <font color=#000064>offset</font> msg                  <font color=#C0C0C0>; si points to msg address </font>
+    <font color=#0000A0>mov</font>     <font color=#800000>cx</font>,     msg_end <font color=#0064C8>-</font> <font color=#000064>offset</font> msg        <font color=#C0C0C0>; cx contain total chars in string </font>
+    move_cursor     0 , 0                       <font color=#C0C0C0>; move at line 0 </font>
+    <font color=#0000A0>call</font>    print_normal 
+    move_cursor     0  , 1                      <font color=#C0C0C0>; move at line 3 </font>
+     
+     
+    question: 
+     
+    <font color=#C0C0C0>;------------ prompt for option----------- </font>
+    <font color=#0000A0>mov</font>     <font color=#800000>bp</font>,     <font color=#000064>offset</font> prompt<font color=#C0C0C0>;   </font>
+    <font color=#0000A0>mov</font>     <font color=#800000>cx</font>,     prompt_end <font color=#0064C8>-</font> <font color=#000064>offset</font> prompt <font color=#C0C0C0>; </font>
+    print_all   
+     
+    <font color=#C0C0C0>;---------- get the option selection -------- </font>
+    <font color=#0000A0>call</font> getchar <font color=#C0C0C0>; 'option' will contain the code </font>
+     
+    <font color=#C0C0C0>; process selected option </font>
+    <font color=#0000A0>call</font> process_option 
+     
+    <font color=#C0C0C0>; move cursor to the next line </font>
+    <font color=#0000A0>inc</font> <font color=#800000>dh</font> 
+    move_cursor <font color=#800000>dl</font>, <font color=#800000>dh</font> 
+     
+    <font color=#C0C0C0>; start again     </font>
+    <font color=#0000A0>jmp</font> question     
+     
+     
+    <font color=#C0C0C0>;------------- PROCEDURES ----------------- </font>
+    <font color=#C0C0C0>;------------------------------------------- </font>
+    <font color=#C0C0C0>; proc : getchar  </font>
+    <font color=#C0C0C0>;--------------------------- </font>
+    getchar <font color=#00FF00>proc</font>  
+        <font color=#0000A0>push</font> <font color=#800000>ax</font> 
+         
+        <font color=#C0C0C0>;get cursor position </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 3h 
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>, 0 
+        <font color=#0000A0>int</font> 10h 
+         
+        <font color=#C0C0C0>; go to next line </font>
+        <font color=#C0C0C0>; dh - row, dl-col </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 2h 
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>, 0 
+        <font color=#0000A0>inc</font> <font color=#800000>dh</font>              <font color=#C0C0C0>; next line </font>
+        <font color=#0000A0>mov</font> <font color=#800000>dl</font>, 0           <font color=#C0C0C0>; go at left </font>
+        <font color=#0000A0>int</font> 10h 
+         
+        <font color=#C0C0C0>; get char </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0h 
+        <font color=#0000A0>int</font> 16h 
+        <font color=#C0C0C0>;echo </font>
+        <font color=#0000A0>mov</font> option, <font color=#800000>al</font>      <font color=#C0C0C0>; store in option </font>
+         
+        <font color=#C0C0C0>; restore regs </font>
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+         
+        <font color=#0000A0>ret</font> 
+    endp     
+         
+     
+    <font color=#C0C0C0>; Procedure : print_normal  </font>
+    <font color=#C0C0C0>;----------------------------------------------------- </font>
+    print_normal <font color=#00FF00>proc</font> 
+         
+        <font color=#0000A0>push</font> <font color=#800000>ax</font>         <font color=#C0C0C0>; save ax </font>
+        <font color=#0000A0>push</font> <font color=#800000>cx</font>         <font color=#C0C0C0>; save cx </font>
+        <font color=#0000A0>push</font> <font color=#800000>si</font>         <font color=#C0C0C0>; save si </font>
+         
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0eh     <font color=#C0C0C0>; teletype output select </font>
+         
+        repeat: 
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, <font color=#0064C8>[</font><font color=#800000>si</font><font color=#0064C8>]</font>        <font color=#C0C0C0>; get the char </font>
+        <font color=#0000A0>int</font> 10h 
+        <font color=#0000A0>inc</font> <font color=#800000>si</font>              <font color=#C0C0C0>; increament si </font>
+        <font color=#0000A0>loop</font> repeat         <font color=#C0C0C0>; repeat until all chars have printed </font>
+         
+        <font color=#C0C0C0>; restore the registers </font>
+        <font color=#0000A0>pop</font> <font color=#800000>si</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+         
+        <font color=#C0C0C0>; return </font>
+        <font color=#0000A0>ret</font> 
+    endp                    <font color=#C0C0C0>; end process </font>
+     
+     
+    <font color=#C0C0C0>; Procedure : clear_window </font>
+    <font color=#C0C0C0>;----------------------------------------------------- </font>
+    clear_window <font color=#00FF00>proc</font> 
+         
+        <font color=#0000A0>push</font> <font color=#800000>ax</font> 
+        <font color=#0000A0>push</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>push</font> <font color=#800000>dx</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bx</font> 
+         
+        <font color=#0000A0>mov</font>     <font color=#800000>ah</font>, 07h                   <font color=#C0C0C0>; scroll up </font>
+        <font color=#0000A0>mov</font>     <font color=#800000>al</font>,  0                  <font color=#C0C0C0>; clear entire window </font>
+        <font color=#0000A0>mov</font>     <font color=#800000>ch</font>  ,   0               <font color=#C0C0C0>;    row </font>
+        <font color=#0000A0>mov</font>     <font color=#800000>cl</font>  ,   0           <font color=#C0C0C0>;    column </font>
+        <font color=#0000A0>mov</font>     <font color=#800000>dh</font>  ,   24          <font color=#C0C0C0>;   25th row </font>
+        <font color=#0000A0>mov</font>     <font color=#800000>dl</font>  ,   79          <font color=#C0C0C0>; 80th column </font>
+        <font color=#0000A0>mov</font>     <font color=#800000>bh</font>  ,   attrib          <font color=#C0C0C0>; cyan background, bright white foreground </font>
+        <font color=#0000A0>int</font> 10h 
+         
+        <font color=#C0C0C0>; move cursor at top left </font>
+        move_cursor 0, 0 
+         
+        <font color=#0000A0>pop</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>dx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+    <font color=#0000A0>ret</font> 
+    endp  <font color=#C0C0C0>; end process     </font>
+     
+     
+    <font color=#C0C0C0>; procedure : process_option </font>
+    <font color=#C0C0C0>;----------------------------- </font>
+    process_option <font color=#00FF00>proc</font>  
+         
+        <font color=#0000A0>push</font> <font color=#800000>ax</font>        
+        <font color=#0000A0>push</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>push</font> <font color=#800000>si</font> 
+         
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, option   
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, <font color=#800080>'R'</font>             <font color=#C0C0C0>; is it reverse string option </font>
+        <font color=#0000A0>JE</font> reverse                <font color=#C0C0C0>; if yes, OK </font>
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, <font color=#800080>'C'</font>             <font color=#C0C0C0>; no?, is it colorize option </font>
+        <font color=#0000A0>JE</font> colorize                <font color=#C0C0C0>; if yes, OK </font>
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, <font color=#800080>'S'</font>             <font color=#C0C0C0>; is it clear screen option </font>
+        <font color=#0000A0>JE</font>  clearscr 
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, <font color=#800080>'E'</font>             <font color=#C0C0C0>; is it Exit request? </font>
+        <font color=#0000A0>JE</font>  exit               <font color=#C0C0C0>; yes. OK </font>
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>,  <font color=#800080>'A'</font>            <font color=#C0C0C0>; change color attribute </font>
+        <font color=#0000A0>JE</font>  change_attrib        
+         
+                     
+        <font color=#C0C0C0>; all options fails, so invalid option </font>
+        <font color=#C0C0C0>; print invalid message </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bp</font>, <font color=#000064>offset</font> invalid_msg 
+        <font color=#0000A0>mov</font> <font color=#800000>cx</font>, invalid_msg_end <font color=#0064C8>-</font> <font color=#000064>offset</font> invalid_msg 
+        print_all 
+         
+        <font color=#0000A0>jmp</font>  end_validate 
+         
+    <font color=#C0C0C0>; option is reverse string     </font>
+    reverse: 
+        <font color=#0000A0>call</font> print_reverse 
+        <font color=#0000A0>jmp</font> end_validate 
+     
+     
+    <font color=#C0C0C0>; option is colorized printing     </font>
+    colorize: 
+        <font color=#0000A0>call</font> colorized_print 
+        <font color=#0000A0>jmp</font> end_validate 
+     
+     
+    <font color=#C0C0C0>; option is change attribute of system </font>
+    change_attrib: 
+        <font color=#0000A0>call</font> change_attribute 
+        <font color=#0000A0>jmp</font>     end_validate 
+         
+     
+     
+    <font color=#C0C0C0>; option is clear screen </font>
+    clearscr: 
+        <font color=#0000A0>call</font> clear_window 
+         
+        <font color=#C0C0C0>; move cursor at top left </font>
+        <font color=#0000A0>mov</font> <font color=#800000>dl</font>, 0   <font color=#C0C0C0>; column 0 </font>
+        <font color=#0000A0>mov</font> <font color=#800000>dh</font>, 0   <font color=#C0C0C0>; row 0 </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 2   <font color=#C0C0C0>; function </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>, 0   <font color=#C0C0C0>; page 0 </font>
+        <font color=#0000A0>int</font> 10h 
+         
+        <font color=#C0C0C0>; after clearing window print the welcome message </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bp</font>, <font color=#000064>offset</font> msg              <font color=#C0C0C0>; si points to msg address </font>
+        <font color=#0000A0>mov</font> <font color=#800000>cx</font>, msg_end <font color=#0064C8>-</font> <font color=#000064>offset</font> msg    <font color=#C0C0C0>; cx contain total chars in string </font>
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>,1 
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>, 0 
+        <font color=#0000A0>mov</font> <font color=#800000>bl</font>, attrib 
+        <font color=#0000A0>mov</font> <font color=#800000>dl</font>, 0 
+        <font color=#0000A0>mov</font> <font color=#800000>dh</font>, 0 
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 13h 
+        <font color=#0000A0>int</font> 10h 
+        <font color=#0000A0>jmp</font> end_validate 
+         
+     
+    <font color=#C0C0C0>; option is REBOOT   </font>
+    exit:     
+        <font color=#0000A0>mov</font> <font color=#800000>bp</font>, <font color=#000064>offset</font> reboot_msg 
+        <font color=#0000A0>mov</font> <font color=#800000>cx</font>, reboot_msg_end <font color=#0064C8>-</font> <font color=#000064>offset</font> reboot_msg 
+        print_all 
+         
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0    
+        <font color=#0000A0>int</font> 16h             <font color=#C0C0C0>; wait for pressing key </font>
+         
+         
+        <font color=#0000A0>int</font> 19h             <font color=#C0C0C0>; reboot </font>
+         
+        <font color=#0000A0>jmp</font> end_validate 
+             
+    end_validate:     
+        <font color=#0000A0>pop</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>si</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+                 
+        <font color=#0000A0>ret</font> 
+         
+        endp     
+     
+     
+         
+     
+    <font color=#C0C0C0>; proc : print_reverse     </font>
+    <font color=#C0C0C0>;----------------------------------- </font>
+    print_reverse <font color=#00FF00>proc</font> 
+        <font color=#0000A0>push</font> <font color=#800000>ax</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bp</font> 
+        <font color=#0000A0>push</font> <font color=#800000>cx</font> 
+          
+        <font color=#0000A0>mov</font> <font color=#800000>bp</font>, <font color=#000064>offset</font> pr_str 
+        <font color=#0000A0>mov</font> <font color=#800000>cx</font>, pr_str_end <font color=#0064C8>-</font> <font color=#000064>offset</font> pr_str 
+        print_all 
+         
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>,0 
+        <font color=#C0C0C0>; set up counter </font>
+        <font color=#0000A0>xor</font> <font color=#800000>cx</font>,<font color=#800000>cx</font> 
+       
+        rev_get: 
+         
+        <font color=#0000A0>int</font> 16h         <font color=#C0C0C0>; get char </font>
+        echo            <font color=#C0C0C0>; echo the char </font>
+         
+        <font color=#C0C0C0>; if enter, stop  and get from stack </font>
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, 0dh 
+        <font color=#0000A0>je</font> get_reverse 
+         
+        <font color=#C0C0C0>; otherwise store in stack </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0 
+        <font color=#0000A0>push</font> <font color=#800000>ax</font> 
+        <font color=#0000A0>inc</font> <font color=#800000>cx</font>          <font color=#C0C0C0>; increase counter </font>
+        <font color=#0000A0>jmp</font> rev_get 
+     
+        get_reverse: 
+         
+        <font color=#C0C0C0>; move ahead two line, for long string </font>
+        move_next_line 
+        move_next_line 
+             
+        <font color=#C0C0C0>; display function </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0eh      
+        <font color=#C0C0C0>; page 0 </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>, 0 
+        <font color=#C0C0C0>; bl = foreground color </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bl</font>, attrib 
+         
+         
+        pop_r:     
+         
+        <font color=#C0C0C0>; pop and display </font>
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+         
+        <font color=#C0C0C0>; display function </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0eh  
+         
+        <font color=#C0C0C0>;mov al, byte ptr temp </font>
+        <font color=#0000A0>int</font> 10h 
+        <font color=#0000A0>loop</font> pop_r  <font color=#C0C0C0>; loop until cx 0 </font>
+             
+     
+    end_rev: 
+         
+                
+        <font color=#0000A0>pop</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>bp</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+         
+        <font color=#0000A0>ret</font> 
+    endp<font color=#C0C0C0>;     </font>
+     
+    <font color=#C0C0C0>; Proc : colorized_print </font>
+    <font color=#C0C0C0>;---------------------------------------------      </font>
+    colorized_print <font color=#00FF00>proc</font>  
+        <font color=#0000A0>push</font> <font color=#800000>ax</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>push</font> <font color=#800000>bp</font> 
+        <font color=#0000A0>push</font> <font color=#800000>cx</font> 
+         
+        <font color=#C0C0C0>; prompt for string  </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bp</font>, <font color=#000064>offset</font> pr_str 
+        <font color=#0000A0>mov</font> <font color=#800000>cx</font>, pr_str_end <font color=#0064C8>-</font> <font color=#000064>offset</font> pr_str 
+        print_all 
+         
+        <font color=#C0C0C0>; read until 'Enter' </font>
+        <font color=#0000A0>xor</font> <font color=#800000>bx</font>,<font color=#800000>bx</font>   <font color=#C0C0C0>; index </font>
+         
+        rep_c: 
+        <font color=#C0C0C0>; function select </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 0 
+        <font color=#C0C0C0>; execute interrupt </font>
+        <font color=#0000A0>int</font> 16h 
+        <font color=#C0C0C0>; echo  </font>
+        echo 
+        <font color=#C0C0C0>; compare,  </font>
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, 0dh 
+        <font color=#C0C0C0>;if 'Enter' end input </font>
+        <font color=#0000A0>je</font> print_color 
+        <font color=#C0C0C0>; else, store the character </font>
+        <font color=#0000A0>mov</font> str<font color=#0064C8>[</font><font color=#800000>bx</font><font color=#0064C8>]</font>, <font color=#800000>al</font> 
+        <font color=#C0C0C0>; increase counter </font>
+        <font color=#0000A0>inc</font> <font color=#800000>bx</font> 
+        <font color=#C0C0C0>; read another </font>
+        <font color=#0000A0>jmp</font> rep_c 
+         
+    print_color: 
+         
+        <font color=#0000A0>mov</font> total_char, <font color=#800000>bl</font>   
+         
+    get_select:     
+        <font color=#C0C0C0>; prompt for color sel </font>
+        <font color=#0000A0>lea</font> <font color=#800000>bp</font>, color_sel 
+        <font color=#0000A0>mov</font> <font color=#800000>cx</font>, color_sel_end <font color=#0064C8>-</font> <font color=#000064>offset</font> color_sel 
+        move_next_line              <font color=#C0C0C0>; for long string </font>
+        print_all 
+               
+        <font color=#0000A0>call</font> getchar    <font color=#C0C0C0>; get the option </font>
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, option  <font color=#C0C0C0>; get option </font>
+         
+        <font color=#C0C0C0>; compare and validate </font>
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, <font color=#800080>'W'</font> 
+        <font color=#0000A0>je</font> white_s 
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, <font color=#800080>'R'</font> 
+        <font color=#0000A0>je</font> red_s 
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, <font color=#800080>'B'</font> 
+        <font color=#0000A0>je</font> black_s 
+        <font color=#0000A0>cmp</font> <font color=#800000>al</font>, <font color=#800080>'G'</font> 
+        <font color=#0000A0>je</font> green_s 
+        <font color=#C0C0C0>; else invalid selection </font>
+         
+        <font color=#C0C0C0>;print warning and get selection again </font>
+        <font color=#C0C0C0>; invalid </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bp</font>, <font color=#000064>offset</font> invalid_msg 
+        <font color=#0000A0>mov</font> <font color=#800000>cx</font>, invalid_msg_end <font color=#0064C8>-</font> <font color=#000064>offset</font> invalid_msg 
+        print_all 
+        <font color=#0000A0>jmp</font> get_select 
+     
+    white_s: 
+        <font color=#C0C0C0>; get current background </font>
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, 0 
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, attrib      <font color=#C0C0C0>; current profile </font>
+        <font color=#0000A0>and</font> <font color=#800000>al</font>, 0f0h         <font color=#C0C0C0>; clear low nibble, font color </font>
+        <font color=#0000A0>or</font>  <font color=#800000>al</font>, white   <font color=#C0C0C0>; get user selected text color </font>
+        <font color=#0000A0>mov</font> user_attrib, <font color=#800000>al</font> 
+        <font color=#0000A0>jmp</font> print 
+    black_s: 
+         
+        <font color=#C0C0C0>; get current background </font>
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, 0 
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, attrib      <font color=#C0C0C0>; current profile </font>
+        <font color=#0000A0>and</font> <font color=#800000>al</font>, 0f0h         <font color=#C0C0C0>; clear low nibble </font>
+        <font color=#0000A0>or</font>  <font color=#800000>al</font>, black   <font color=#C0C0C0>; get user selected text color </font>
+        <font color=#0000A0>mov</font> user_attrib, <font color=#800000>al</font> 
+        <font color=#0000A0>jmp</font> print 
+    green_s: 
+         
+        <font color=#C0C0C0>; get current background </font>
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, 0 
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, attrib      <font color=#C0C0C0>; current profile </font>
+        <font color=#0000A0>and</font> <font color=#800000>al</font>, 0f0h        <font color=#C0C0C0>; clear low nibble </font>
+        <font color=#0000A0>or</font>  <font color=#800000>al</font>, green   <font color=#C0C0C0>; get user selected text color </font>
+        <font color=#0000A0>mov</font> user_attrib, <font color=#800000>al</font> 
+        <font color=#0000A0>jmp</font> print 
+    red_s: 
+         
+        <font color=#C0C0C0>; get current background </font>
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, 0 
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>, attrib      <font color=#C0C0C0>; current profile </font>
+        <font color=#0000A0>and</font> <font color=#800000>al</font>, 0f0h        <font color=#C0C0C0>; clear low nibble </font>
+        <font color=#0000A0>or</font>  <font color=#800000>al</font>, red   <font color=#C0C0C0>; get user selected text color </font>
+        <font color=#0000A0>mov</font> user_attrib, <font color=#800000>al</font> 
+         
+        <font color=#0000A0>jmp</font> print 
+     
+    print:                           
+         
+        <font color=#0000A0>mov</font> <font color=#800000>al</font>,1 
+        <font color=#C0C0C0>; page 0 </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bh</font>, 0 
+        <font color=#C0C0C0>; attribute </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bl</font>, user_attrib 
+        <font color=#C0C0C0>; total char </font>
+        <font color=#0000A0>xor</font> <font color=#800000>cx</font>,<font color=#800000>cx</font> 
+        <font color=#0000A0>mov</font> <font color=#800000>cl</font>, total_char 
+        <font color=#C0C0C0>; function select </font>
+        <font color=#0000A0>mov</font> <font color=#800000>ah</font>, 13h 
+        <font color=#C0C0C0>; load bp with offset </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bp</font> , <font color=#000064>offset</font> str 
+        <font color=#C0C0C0>; execute </font>
+        <font color=#0000A0>int</font> 10h 
+         
+    end_print_c: 
+        <font color=#0000A0>pop</font> <font color=#800000>cx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>bp</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>bx</font> 
+        <font color=#0000A0>pop</font> <font color=#800000>ax</font> 
+         
+        <font color=#0000A0>ret</font> 
+         
+        <font color=#C0C0C0>; varible for procedure </font>
+        user_attrib <font color=#000064>db</font>  ? 
+        total_char <font color=#000064>db</font> ? 
+         
+    endp 
+     
+    <font color=#C0C0C0>; Proc: change_attrib </font>
+    <font color=#C0C0C0>;------------------------------------------- </font>
+     change_attribute  <font color=#00FF00>proc</font> 
+         
+        <font color=#0000A0>push</font>    <font color=#800000>ax</font> 
+        <font color=#0000A0>push</font>    <font color=#800000>bp</font> 
+        <font color=#0000A0>push</font>    <font color=#800000>cx</font> 
+         
+        get_selection:    
+        <font color=#C0C0C0>; prompt and get option </font>
+        <font color=#0000A0>mov</font>     <font color=#800000>bp</font>,     <font color=#000064>offset</font>  profile_select 
+        <font color=#0000A0>mov</font>     <font color=#800000>cx</font>,     profile_select_end <font color=#0064C8>-</font> <font color=#000064>offset</font> profile_select 
+        print_all 
+         
+        <font color=#0000A0>call</font> getchar        <font color=#C0C0C0>; selection is in option var </font>
+         
+        <font color=#C0C0C0>; compare, validate and change </font>
+        <font color=#0000A0>mov</font>     <font color=#800000>al</font>,     option 
+         
+        <font color=#0000A0>cmp</font>     <font color=#800000>al</font>,     <font color=#800080>'1'</font> 
+        <font color=#0000A0>je</font>      black_W         <font color=#C0C0C0>; black-W </font>
+        <font color=#0000A0>cmp</font>     <font color=#800000>al</font>,     <font color=#800080>'2'</font> 
+        <font color=#0000A0>je</font>      blue_Y          <font color=#C0C0C0>; blue-Yellow </font>
+         
+        <font color=#0000A0>cmp</font>     <font color=#800000>al</font>,     <font color=#800080>'3'</font>     <font color=#C0C0C0>; lightgray_black </font>
+        <font color=#0000A0>je</font>      gray_B 
+         
+        <font color=#0000A0>cmp</font>     <font color=#800000>al</font>,     <font color=#800080>'4'</font>  
+        <font color=#0000A0>je</font>      cyan_W          <font color=#C0C0C0>; cyan-White </font>
+         
+        <font color=#C0C0C0>; if invalid, display invalid msg </font>
+        <font color=#0000A0>mov</font> <font color=#800000>bp</font>, <font color=#000064>offset</font> invalid_msg 
+        <font color=#0000A0>mov</font> <font color=#800000>cx</font>, invalid_msg_end <font color=#0064C8>-</font> <font color=#000064>offset</font> invalid_msg 
+        print_all 
+        move_next_line          <font color=#C0C0C0>; move the cursor next line </font>
+         
+        <font color=#C0C0C0>; get the input, again </font>
+        <font color=#0000A0>jmp</font>    get_selection 
+         
+        <font color=#C0C0C0>; option valid, so process </font>
+        black_W: 
+        <font color=#0000A0>mov</font>     attrib,     black_white 
+        <font color=#0000A0>call</font>    clear_window  
+        <font color=#0000A0>jmp</font>     end_change_attrib 
+         
+        blue_Y: 
+        <font color=#0000A0>mov</font>     attrib,     blue_yellow 
+        <font color=#0000A0>call</font>    clear_window 
+        <font color=#0000A0>jmp</font>     end_change_attrib 
+         
+        cyan_W: 
+        <font color=#0000A0>mov</font>     attrib,     default 
+        <font color=#0000A0>call</font>    clear_window 
+        <font color=#0000A0>jmp</font>     end_change_attrib 
+         
+        gray_B: 
+        <font color=#0000A0>mov</font>     attrib,     gray_black 
+        <font color=#0000A0>call</font>    clear_window 
+        <font color=#0000A0>jmp</font>     end_change_attrib 
+         
+         
+        end_change_attrib: 
+        <font color=#C0C0C0>; processing complete, pop  the registers </font>
+        <font color=#0000A0>pop</font>     <font color=#800000>cx</font> 
+        <font color=#0000A0>pop</font>     <font color=#800000>bp</font> 
+        <font color=#0000A0>pop</font>     <font color=#800000>ax</font>   
+         
+         
+        <font color=#0000A0>ret</font> 
+         
+        endp 
+         
+     
+    <font color=#C0C0C0>; © Mohammad Anwar Shah             </font>
+</font></pre>
+<center> <font color=#FFFFFF>;</font> <a href="http://www.emu8086.com" target="_blank"><font face=verdana size=1 color=#000000> - asm2html - </font></a> </center>
+<!-- emu8086 version 4.07    -->
+<!-- STOP AUTOMATIC ASM TO HTML EXPORT -->
+
+
+
+
+ 
+ 
+<!-- *** -->
+ 
+ 
+</body>
+</html>
